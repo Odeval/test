@@ -1,0 +1,109 @@
+/*
+				Copyright <SWGEmu>
+		See file COPYING for copying conditions.*/
+
+#ifndef SETPLAYERAPPSLUDGECOMMAND_H_
+#define SETPLAYERAPPSLUDGECOMMAND_H_
+
+class SetPlayerAppSludgeCommand : public QueueCommand {
+public:
+
+	SetPlayerAppSludgeCommand(const String& name, ZoneProcessServer* server)
+		: QueueCommand(name, server) {
+
+	}
+
+	int doQueueCommand(CreatureObject* creature, const uint64& target, const UnicodeString& arguments) const {
+
+		if (!checkStateMask(creature))
+			return INVALIDSTATE;
+
+		if (!checkInvalidLocomotions(creature))
+			return INVALIDLOCOMOTION;
+		
+		if (!creature->isPlayerCreature())
+			return GENERALERROR;
+
+		// Speed related stuff
+		float speed = 6.f;
+		int duration = 86400; // Set for 24 hours
+		uint32 buffCRC = STRING_HASHCODE("setspeed");
+		ManagedReference<Buff*> speedBuff = new Buff(creature, buffCRC, duration, BuffType::OTHER);
+		Locker locker(speedBuff);
+		
+		speedBuff->setSpeedMultiplierMod(speed);
+		speedBuff->setAccelerationMultiplierMod(speed);
+
+		ManagedReference<CreatureObject*> targetCreature = nullptr;
+		PlayerManager* playerManager = server->getZoneServer()->getPlayerManager();
+		UnicodeTokenizer tokenizer(arguments);
+		String templateName = "";
+		String targetName = "";
+		String argument="object/mobile/shared_greater_sludge_panther.iff";
+		uint64 simTarget = creature->getObjectID();
+
+		if (target != 0) {
+			//targetCreature = server->getZoneServer()->getObject(target).castTo<CreatureObject*>(); // Original
+			targetCreature = server->getZoneServer()->getObject(simTarget).castTo<CreatureObject*>();
+		} else {
+			if (!tokenizer.hasMoreTokens()) {
+				sendSyntax(creature);
+				return GENERALERROR;
+			}
+
+			tokenizer.getStringToken(targetName);
+			targetCreature = playerManager->getPlayer(targetName);
+		}
+
+		if (targetCreature == nullptr || !targetCreature->isPlayerCreature()) {
+			sendSyntax(creature);
+			return INVALIDTARGET;
+		}
+
+		if (tokenizer.hasMoreTokens())
+			tokenizer.getStringToken(argument);
+
+		if (argument != "" && (argument.indexOf(".iff") == -1 || argument.indexOf("object/mobile/shared_") == -1)) {
+			creature->sendSystemMessage("Invalid template.");
+			return GENERALERROR;
+		} else if (argument != "") {
+			TemplateManager* templateManager = TemplateManager::instance();
+			String templateTest = argument.replaceFirst("shared_", "");
+			SharedObjectTemplate* templateData = templateManager->getTemplate(templateTest.hashCode());
+			if (templateData == nullptr) {
+				creature->sendSystemMessage("Unable to find template.");
+				return GENERALERROR;
+			}
+			templateName = argument;
+		}
+
+		Locker targetLocker(targetCreature, creature);
+
+		targetCreature->setAlternateAppearance(templateName, true);
+		creature->addBuff(speedBuff);
+
+		// Required to reset a target to its normal template
+		if (templateName == "") {
+			Zone* zone = targetCreature->getZone();
+
+			if (zone != nullptr) {
+				creature->sendSystemMessage("The target's player appearance template has been reset to its default.");
+				targetCreature->switchZone(zone->getZoneName(), targetCreature->getPositionX(), targetCreature->getPositionZ(), targetCreature->getPositionY(), targetCreature->getParentID());
+			}
+		}
+
+		creature->playEffect("clienteffect/pl_force_run.cef");
+
+
+		return SUCCESS;
+	}
+
+	void sendSyntax(CreatureObject* creature) const {
+		//creature->sendSystemMessage("SYNTAX: /setPlayerAppearance [player] [mobile object template with shared in filename or blank to reset]");
+		//creature->sendSystemMessage("EXAMPLE: /setPlayerAppearance playerName object/mobile/shared_darth_vader.iff");
+		//creature->sendSystemMessage("EXAMPLE RESET: /setPlayerAppearance playerName");
+	}
+
+};
+
+#endif //SETPLAYERAPPSLUDGECOMMAND_H_
