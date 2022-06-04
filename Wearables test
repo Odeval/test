@@ -104,22 +104,27 @@ void WearableObjectImplementation::generateSockets(CraftingValues* craftingValue
 	int skill = 0;
 	int luck = 0;
 
-	if (craftingValues != nullptr) {
+	if (craftingValues != NULL) {
 		ManagedReference<ManufactureSchematic*> manuSchematic = craftingValues->getManufactureSchematic();
-		if(manuSchematic != nullptr) {
+		if(manuSchematic != NULL) {
 			ManagedReference<DraftSchematic*> draftSchematic = manuSchematic->getDraftSchematic();
 			ManagedReference<CreatureObject*> player = manuSchematic->getCrafter().get();
 
-			if (player != nullptr && draftSchematic != nullptr) {
-				String assemblySkill = draftSchematic->getAssemblySkill();
-				skill = player->getSkillMod(assemblySkill) * 2.5; // 0 to 250 max
-				luck = System::random(player->getSkillMod("luck")
-						+ player->getSkillMod("force_luck"));
+			if (player != NULL && draftSchematic != NULL) {
+				String assemblySkillstring = draftSchematic->getAssemblySkill();
+				int assemblySkill  = player->getSkillMod(assemblySkillstring);
+				assemblySkill += player->getSkillMod("force_assembly");
+
+				skill = assemblySkill * 3.45; // 0 to 500 max  (345 for master crafter, no tapes, no force assembly)
+
+				// Let's cap the chance of 4-sockets at 90%
+				if (skill  > 450)
+					skill = 450;
 			}
 		}
 	}
 
-	int random = (System::random(750)) - 250; // -250 to 500
+	int random = (System::random(500)) - 100; // -100 to 400 90% chance of 4 sockets w/ master, +25 assembly tapes, & +20 force assembly, 69% chance of 4 sockets with master only, 13.8% at novice
 
 	float roll = System::random(skill + luck + random);
 
